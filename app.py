@@ -236,7 +236,7 @@ def create_venue_submission():
    flash('Venue ' + request.form['name'] + ' was successfully listed!')
   except SQLAlchemyError  as e:
      db.session.rollback()
-     flash('An error occurred. Venue ' + venue.name + ' could not be listed.')
+     flash('An error occurred. Venue ' + request.form['name'] + ' could not be listed.')
   finally:
     db.session.close()
     
@@ -252,6 +252,15 @@ def create_venue_submission():
 
 @app.route('/venues/<venue_id>', methods=['DELETE'])
 def delete_venue(venue_id):
+  
+  try:
+    venue = Venue.query.get(venue_id)
+    db.session.delete(venue)
+    db.session.commit()
+  except SQLAlchemyError  as e:
+     db.session.rollback()
+  finally:
+    db.session.close()
   # TODO: Complete this endpoint for taking a venue_id, and using
   # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
 
@@ -263,8 +272,16 @@ def delete_venue(venue_id):
 #  ----------------------------------------------------------------
 @app.route('/artists')
 def artists():
+  artists = Artist.query.all()
+  data = []
+  for artist in artists:
+    data.append({
+    "id": artist.id,
+    "name": artist.name,
+      }
+                )
   # TODO: replace with real data returned from querying the database
-  data=[{
+  """ data=[{
     "id": 4,
     "name": "Guns N Petals",
   }, {
@@ -273,7 +290,7 @@ def artists():
   }, {
     "id": 6,
     "name": "The Wild Sax Band",
-  }]
+  }] """
   return render_template('pages/artists.html', artists=data)
 
 @app.route('/artists/search', methods=['POST'])
