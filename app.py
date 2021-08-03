@@ -20,6 +20,7 @@ from forms import *
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from models import *
+from sqlalchemy import desc
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -32,31 +33,37 @@ db = db_setup(app)
 # helper function.
 #----------------------------------------------------------------------------#
 
-
+# return the number of upcoming shows 
 def upcoming_shows_count(value):
     
-    if isinstance(value,Venue):
-     return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date>datetime.now()).all())
+# check if the value is Venue or Artist object
+    if isinstance(value, Venue):
+        return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date > datetime.now()).all())
     else:
-     return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date>datetime.now()).all())
+        return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date > datetime.now()).all())
 
-
+# return the number of past shows 
 def past_shows_count(value):
     
-    if isinstance(value,Venue):
-     return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date<datetime.now()).all())
+# check if the value is Venue or Artist object
+    if isinstance(value, Venue):
+        return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date < datetime.now()).all())
     else:
-     return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date<datetime.now()).all())
+        return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date < datetime.now()).all())
 
-
+# return the upcoming shows 
 def upcoming_shows_func(value):
+    if isinstance(value, Venue):
+        return db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date > datetime.now()).all()
+    else:
+        return db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date > datetime.now()).all()
 
-    return value.shows.filter(Show.start_date > datetime.now()).all()
-
-
+# return the past shows 
 def past_shows_func(value):
-
-    return value.shows.filter(Show.start_date < datetime.now()).all()
+    if isinstance(value, Venue):
+        return db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date < datetime.now()).all()
+    else:
+        return db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date < datetime.now()).all()
 
 #----------------------------------------------------------------------------#
 # Filters.
@@ -78,7 +85,7 @@ app.jinja_env.filters['datetime'] = format_datetime
 # Controllers.
 #----------------------------------------------------------------------------#
 
-
+# home page
 @app.route('/')
 def index():
     return render_template('pages/home.html')
@@ -87,16 +94,19 @@ def index():
 #  Venues
 #  ----------------------------------------------------------------
 
+# returning venues page
 @app.route('/venues')
 def venues():
-    #       num_upcoming_shows should be aggregated based on number of upcoming shows per venue.
+    # group venues by city and state 
     venues_states = Venue.query.with_entities(func.count(
         Venue.id), Venue.city, Venue.state).group_by(Venue.city, Venue.state).all()
     data = []
+    # loop for each venue area and add it in data array
     for area in venues_states:
         venue_area = Venue.query.filter_by(
             state=area.state).filter_by(city=area.city).all()
         venues_data = []
+        # loop for each venue in one area and add it in venues_data array
         for venue in venue_area:
             venues_data.append({
                 "id": venue.id,
@@ -113,9 +123,11 @@ def venues():
     return render_template('pages/venues.html', areas=data)
 
 
+# search for venue by name 
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
     search_term = request.form.get('search_term', '')
+    # search for venue name that like a given term
     search = Venue.query.filter(
         Venue.name.ilike('%' + search_term + '%')).all()
     data = []
@@ -125,17 +137,21 @@ def search_venues():
             "name": venue.name,
             "num_upcoming_shows": upcoming_shows_count(venue),
         })
+        # the number of venues that like the search term and the venues objects itself
     response = {
         "count": len(data),
         "data": data
     }
     return render_template('pages/search_venues.html', results=response, search_term=request.form.get('search_term', ''))
 
-
+    # open venue details with a given id 
 @app.route('/venues/<int:venue_id>')
 def show_venue(venue_id):
+    
     # shows the venue page with the given venue_id
+    
     venue = Venue.query.get(venue_id)
+    # if venue by venue.id is not available open error page
     if not venue:
         return render_template("errors/404.html")
     past_show = []
@@ -177,18 +193,21 @@ def show_venue(venue_id):
     }
     return render_template('pages/show_venue.html', venue=data)
 
-#  Create Venue
+
+#  Create new Venue 
 #  ----------------------------------------------------------------
 
-
+# form page to create new Venue
 @app.route('/venues/create', methods=['GET'])
 def create_venue_form():
     form = VenueForm()
     return render_template('forms/new_venue.html', form=form)
 
-
+# redirect to home page for venue creation
 @app.route('/venues/create', methods=['POST'])
 def create_venue_submission():
+    
+    # try to add new venue object to the database
     try:
         venue = Venue(
             name=request.form.get('name'),
@@ -207,6 +226,9 @@ def create_venue_submission():
         db.session.add(venue)
         db.session.commit()
         flash('Venue ' + request.form['name'] + ' was successfully listed!')
+        # if we got this far, it means that the venue was successfully added!''
+        
+        # if we had an error adding the venue to the database then roollback the request
     except SQLAlchemyError as e:
         db.session.rollback()
         flash('An error occurred. Venue ' +
@@ -217,27 +239,37 @@ def create_venue_submission():
     return render_template('pages/home.html')
 
 
+# delete the venue from the database by its id 
 @app.route('/venues/<venue_id>/delete', methods=['GET', 'POST'])
 def delete_venue(venue_id):
-
+    
+    # try to delete venue object with the id passed from the database
     try:
         venue = Venue.query.get(venue_id)
         db.session.delete(venue)
         db.session.commit()
+        
+    # if we had an error deleteing the venue from the database then roollback the request
     except SQLAlchemyError as e:
         db.session.rollback()
     finally:
         db.session.close()
     return redirect(url_for('index'))
 
+
+
+
 #  Artists
 #  ----------------------------------------------------------------
 
-
+# open artists page for viewing
 @app.route('/artists')
 def artists():
+    # retrieve artists objects from the database order by artist id 
     artists = Artist.query.order_by(Artist.id).all()
     data = []
+    
+ # loop for each artist in artists objects and add data array
     for artist in artists:
         data.append({
             "id": artist.id,
@@ -246,12 +278,16 @@ def artists():
         )
     return render_template('pages/artists.html', artists=data)
 
-
+# search for artist by name 
 @app.route('/artists/search', methods=['POST'])
 def search_artists():
+    
     search_term = request.form.get('search_term', '')
+    
+ # search for artist name that like a given term
     artists_search = Artist.query.filter(
         Artist.name.ilike('%' + search_term + '%')).all()
+    
     data = []
     for artist in artists_search:
         data.append({
@@ -259,6 +295,8 @@ def search_artists():
             "name": artist.name,
             "num_upcoming_shows": upcoming_shows_count(artist),
         })
+        
+   # the number of artist.name that like the search term and the artists objects 
     response = {
         "count": len(data),
         "data": data
@@ -266,9 +304,13 @@ def search_artists():
     return render_template('pages/search_artists.html', results=response, search_term=request.form.get('search_term', ''))
 
 
+ # open artist details with a given id 
 @app.route('/artists/<int:artist_id>')
 def show_artist(artist_id):
+    
     artist = Artist.query.get(artist_id)
+    
+  # if artist by artist.id is not available open error page
     if not artist:
         return render_template('errors/404.html')
 
@@ -309,49 +351,53 @@ def show_artist(artist_id):
     }
     return render_template('pages/show_artist.html', artist=data)
 
+
 #  Update
 #  ----------------------------------------------------------------
 
-
+# edit artists details form with a given id
 @app.route('/artists/<int:artist_id>/edit', methods=['GET'])
 def edit_artist(artist_id):
     artist = Artist.query.get(artist_id)
     form = ArtistForm(obj=artist)
     return render_template('forms/edit_artist.html', form=form, artist=artist)
 
-
+# edit artist details with a given id
 @app.route('/artists/<int:artist_id>/edit', methods=['POST'])
 def edit_artist_submission(artist_id):
+    
+# try updateing the artist data of the givin id 
+    try:
+        artist = Artist.query.get(artist_id)
+        setattr(artist, 'name', request.form.get('name'))
+        setattr(artist, 'genres', request.form.getlist('genres'))
+        setattr(artist, 'address', request.form.get('address'))
+        setattr(artist, 'city', request.form.get('city'))
+        setattr(artist, 'state', request.form.get('state'))
+        setattr(artist, 'phone', request.form.get('phone'))
+        setattr(artist, 'website', request.form.get('website'))
+        setattr(artist, 'facebook_link', request.form.get('facebook_link'))
+        setattr(artist, 'looking_for_venue', bool(
+            request.form.get('looking_for_venue')))
+        setattr(artist, 'seeking_description',
+                request.form.get('seeking_description'))
+        setattr(artist, 'image_link', request.form.get('image_link'))
+        db.session.commit()
+        flash('artist ' + request.form['name'] + ' was successfully edited!')
 
-  try:
-    artist = Artist.query.get(artist_id)
-    setattr(artist, 'name', request.form.get('name'))
-    setattr(artist, 'genres', request.form.getlist('genres'))
-    setattr(artist, 'address', request.form.get('address'))
-    setattr(artist, 'city', request.form.get('city'))
-    setattr(artist, 'state', request.form.get('state'))
-    setattr(artist, 'phone', request.form.get('phone'))
-    setattr(artist, 'website', request.form.get('website'))
-    setattr(artist, 'facebook_link', request.form.get('facebook_link'))
-    setattr(artist, 'looking_for_venue', bool(
-        request.form.get('looking_for_venue')))
-    setattr(artist, 'seeking_description',
-            request.form.get('seeking_description'))
-    setattr(artist, 'image_link', request.form.get('image_link'))
-    db.session.commit()
-    flash('artist ' + request.form['name'] + ' was successfully edited!')
+# throw error if something goes wrong and rollback
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        flash('An error occurred. Artist ' +
+              request.form['name'] + ' could not be edited.')
 
-  except SQLAlchemyError as e:
-    db.session.rollback()
-    flash('An error occurred. Artist ' +
-          request.form['name'] + ' could not be edited.')
+    finally:
+        db.session.close()
 
-  finally:
-    db.session.close()
-
-  return redirect(url_for('show_artist', artist_id=artist_id))
+    return redirect(url_for('show_artist', artist_id=artist_id))
 
 
+# get edit Venue details form with a given id and populate it with the Venue data
 @app.route('/venues/<int:venue_id>/edit', methods=['GET'])
 def edit_venue(venue_id):
     venue = Venue.query.get(venue_id)
@@ -359,51 +405,55 @@ def edit_venue(venue_id):
     return render_template('forms/edit_venue.html', form=form, venue=venue)
 
 
+# edit venue details with a given id
 @app.route('/venues/<int:venue_id>/edit', methods=['POST'])
 def edit_venue_submission(venue_id):
 
-  try:
-    venue = Venue.query.get(venue_id)
-    setattr(venue, 'name', request.form.get('name'))
-    setattr(venue, 'genres', request.form.getlist('genres'))
-    setattr(venue, 'address', request.form.get('address'))
-    setattr(venue, 'city', request.form.get('city'))
-    setattr(venue, 'state', request.form.get('state'))
-    setattr(venue, 'phone', request.form.get('phone'))
-    setattr(venue, 'website', request.form.get('website'))
-    setattr(venue, 'facebook_link', request.form.get('facebook_link'))
-    setattr(venue, 'looking_for_talent', bool(
-        request.form.get('looking_for_talent')))
-    setattr(venue, 'seeking_description',
-            request.form.get('seeking_description'))
-    setattr(venue, 'image_link', request.form.get('image_link'))
-    db.session.commit()
-    flash('venue ' + request.form['name'] + ' was successfully edited!')
+# try updateing the venue data of the givin id 
+    try:
+        venue = Venue.query.get(venue_id)
+        setattr(venue, 'name', request.form.get('name'))
+        setattr(venue, 'genres', request.form.getlist('genres'))
+        setattr(venue, 'address', request.form.get('address'))
+        setattr(venue, 'city', request.form.get('city'))
+        setattr(venue, 'state', request.form.get('state'))
+        setattr(venue, 'phone', request.form.get('phone'))
+        setattr(venue, 'website', request.form.get('website'))
+        setattr(venue, 'facebook_link', request.form.get('facebook_link'))
+        setattr(venue, 'looking_for_talent', bool(
+            request.form.get('looking_for_talent')))
+        setattr(venue, 'seeking_description',
+                request.form.get('seeking_description'))
+        setattr(venue, 'image_link', request.form.get('image_link'))
+        db.session.commit()
+        flash('venue ' + request.form['name'] + ' was successfully edited!')
 
-  except SQLAlchemyError as e:
-    db.session.rollback()
-    flash('An error occurred. venue ' +
-          request.form['name'] + ' could not be edited.')
+# throw error if something goes wrong and rollback
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        flash('An error occurred. venue ' +
+              request.form['name'] + ' could not be edited.')
 
-  finally:
-    db.session.close()
+    finally:
+        db.session.close()
 
-  return redirect(url_for('show_venue', venue_id=venue_id))
+    return redirect(url_for('show_venue', venue_id=venue_id))
 
 #  Create Artist
 #  ----------------------------------------------------------------
 
-
+# get Artist form page to create artist
 @app.route('/artists/create', methods=['GET'])
 def create_artist_form():
     form = ArtistForm()
     return render_template('forms/new_artist.html', form=form)
 
-
+# create new artist and add it to the database 
 @app.route('/artists/create', methods=['POST'])
 def create_artist_submission():
-  
-   try:
+
+# try to create a new artist and add it to the database 
+    try:
         artist = Artist(
             name=request.form.get('name'),
             genres=request.form.getlist('genres'),
@@ -419,15 +469,19 @@ def create_artist_submission():
         db.session.add(artist)
         db.session.commit()
         flash('artist ' + request.form['name'] +
-                  ' was successfully listed!')
-   except SQLAlchemyError as e:
+              ' was successfully listed!')
+        
+    # throw an error if we couldn't add artist  and roollback'
+    except SQLAlchemyError as e:
         db.session.rollback()
         flash('An error occurred. artist ' +
-        request.form['name'] + ' could not be listed.')
-   finally:
+              request.form['name'] + ' could not be listed.')
+    finally:
         db.session.close()
-   return render_template('pages/home.html')
+    return render_template('pages/home.html')
 
+
+# delete artist  with a given id
 @app.route('/artists/<int:artist_id>/delete', methods=['GET', 'POST'])
 def delete_artist(artist_id):
 
@@ -436,42 +490,54 @@ def delete_artist(artist_id):
         db.session.delete(artist)
         db.session.commit()
     except SQLAlchemyError as e:
+        flash('An error occurred. artist ' )
         db.session.rollback()
     finally:
         db.session.close()
     return redirect(url_for('index'))
+
+
 #  Shows
 #  ----------------------------------------------------------------
 
+# open shows page and populate it with shows object from the database
 @app.route('/shows')
 def shows():
-  shows = Show.query.all()
-  if not shows:
-    flash(' there are no shows available')
-    return redirect(url_for('index'))
-  data=[]
-  for show in shows:
-    data.append({
-        "venue_id": show.Venue_id,
-        "venue_name": show.Venue.name,
-        "artist_id": show.Artist_id,
-        "artist_name": show.Artist.name,
-        "artist_image_link": show.Artist.image_link,
-        "start_time": show.start_date.strftime("%m/%d/%Y, %H:%M:%S")
-    })
+    
+    # retrieve all shows from the database order by date 
+    Shows = Show.query.order_by(desc(Show.start_date)).all()
+    
+    data = []
+    # check if there no shows redirect to home page 
+    if not Shows:
+        flash(' there are no shows available')
+        return redirect(url_for('index'))
+    
+    # loop through all shows and append them to data array 
+    for show in Shows:
+        data.append(
+            {
+                "venue_id": show.Venue_id,
+                "venue_name": show.Venue.name,
+                "artist_id": show.Artist_id,
+                "artist_name": show.Artist.name,
+                "artist_image_link": show.Artist.image_link,
+                "start_time": show.start_date.strftime("%m/%d/%Y, %H:%M:%S")
+            })
+
     return render_template('pages/shows.html', shows=data)
 
-
+# get the show form data to create a new show
 @app.route('/shows/create')
 def create_shows():
     # renders form. do not touch.
     form = ShowForm()
     return render_template('forms/new_show.html', form=form)
 
-
+# create a new show and add it to the database
 @app.route('/shows/create', methods=['POST'])
 def create_show_submission():
-  try:
+    try:
         show = Show(
             Venue_id=request.form.get('venue_id'),
             Artist_id=request.form.get('artist_id'),
@@ -481,14 +547,14 @@ def create_show_submission():
         db.session.commit()
         flash('Show was successfully listed!')
 
-  except SQLAlchemyError as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
         flash('An error occurred. Show ' +
-        request.form['start_time'] + ' could not be listed.')
-  finally:
+              request.form['start_time'] + ' could not be listed.')
+    finally:
         db.session.close()
-   
-  return render_template('pages/home.html')
+
+    return render_template('pages/home.html')
 
 
 @app.errorhandler(404)
@@ -521,9 +587,3 @@ if __name__ == '__main__':
     app.run()
 
 # Or specify port manually:
-
-'''
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-'''

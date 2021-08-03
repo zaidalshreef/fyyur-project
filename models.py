@@ -3,13 +3,15 @@ from flask_migrate import Migrate
 
 db = SQLAlchemy()
 
+
 def db_setup(app):
     app.config.from_object('config')
+    db.app = app
     db.init_app(app)
     migrate = Migrate(app, db)
     return db
      
-     
+    #  creating Venue table 
 class Venue(db.Model):
     __tablename__ = 'Venue'
 
@@ -25,10 +27,10 @@ class Venue(db.Model):
     website = db.Column(db.String)
     looking_for_talent = db.Column(db.Boolean, default=False)
     seeking_description = db.Column(db.String)
-    shows = db.relationship('Show', backref='Venue', lazy='dynamic')
+    shows = db.relationship('Show', backref='Venue',cascade="all, delete", lazy='dynamic')
 
 
-
+#  creating Artist table
 class Artist(db.Model):
     __tablename__ = 'Artist'
 
@@ -43,15 +45,15 @@ class Artist(db.Model):
     website = db.Column(db.String)
     looking_for_venue = db.Column(db.Boolean, default=False)
     seeking_description = db.Column(db.String)
-    shows = db.relationship('Show', backref='Artist', lazy='dynamic')
+    shows = db.relationship('Show', backref='Artist',cascade="all, delete" ,lazy='dynamic')
 
 
-
+#  creating Show table
 class Show(db.Model):
     __tablename__ = 'Show'
     id = db.Column(db.Integer, primary_key=True)
     start_date = db.Column(db.DateTime, nullable=False)
     Venue_id = db.Column(db.Integer, db.ForeignKey(
-        'Venue.id', ondelete='CASCADE'), nullable=False)
+        'Venue.id'), nullable=False)
     Artist_id = db.Column(db.Integer, db.ForeignKey(
-        'Artist.id', ondelete='CASCADE'), nullable=False)
+        'Artist.id'), nullable=False)
