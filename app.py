@@ -19,78 +19,34 @@ from sqlalchemy.sql.sqltypes import ARRAY
 from forms import *
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
-
+from models import *
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
 
 app = Flask(__name__)
 moment = Moment(app)
-app.config.from_object('config')
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+db = db_setup(app)
 
-#----------------------------------------------------------------------------#
-# Models.
-#----------------------------------------------------------------------------#
-
-
-class Venue(db.Model):
-    __tablename__ = 'Venue'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    address = db.Column(db.String(120))
-    phone = db.Column(db.Integer)
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    genres = db.Column(db.ARRAY(db.String))
-    website = db.Column(db.String)
-    looking_for_talent = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String)
-    shows = db.relationship('Show', backref='Venue', lazy='dynamic')
-
-
-class Artist(db.Model):
-    __tablename__ = 'Artist'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    phone = db.Column(db.Integer)
-    genres = db.Column(db.ARRAY(db.String(120)))
-    image_link = db.Column(db.String(500))
-    facebook_link = db.Column(db.String(120))
-    website = db.Column(db.String)
-    looking_for_venue = db.Column(db.Boolean, default=False)
-    seeking_description = db.Column(db.String)
-    shows = db.relationship('Show', backref='Artist', lazy='dynamic')
-
-
-class Show(db.Model):
-    __tablename__ = 'Show'
-    id = db.Column(db.Integer, primary_key=True)
-    start_date = db.Column(db.DateTime, nullable=False)
-    Venue_id = db.Column(db.Integer, db.ForeignKey(
-        'Venue.id', ondelete='CASCADE'), nullable=False)
-    Artist_id = db.Column(db.Integer, db.ForeignKey(
-        'Artist.id', ondelete='CASCADE'), nullable=False)
 #----------------------------------------------------------------------------#
 # helper function.
 #----------------------------------------------------------------------------#
 
 
 def upcoming_shows_count(value):
-
-    return len(value.shows.filter(Show.start_date > datetime.now()).all())
+    
+    if isinstance(value,Venue):
+     return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date>datetime.now()).all())
+    else:
+     return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date>datetime.now()).all())
 
 
 def past_shows_count(value):
-
-    return len(value.shows.filter(Show.start_date < datetime.now()).all())
+    
+    if isinstance(value,Venue):
+     return len(db.session.query(Show).join(Venue).filter(Show.Venue_id == value.id).filter(Show.start_date<datetime.now()).all())
+    else:
+     return len(db.session.query(Show).join(Artist).filter(Show.Artist_id == value.id).filter(Show.start_date<datetime.now()).all())
 
 
 def upcoming_shows_func(value):
@@ -375,7 +331,7 @@ def edit_artist_submission(artist_id):
     setattr(artist, 'city', request.form.get('city'))
     setattr(artist, 'state', request.form.get('state'))
     setattr(artist, 'phone', request.form.get('phone'))
-    setattr(artist, 'website', request.form.get('website_link'))
+    setattr(artist, 'website', request.form.get('website'))
     setattr(artist, 'facebook_link', request.form.get('facebook_link'))
     setattr(artist, 'looking_for_venue', bool(
         request.form.get('looking_for_venue')))
@@ -472,7 +428,18 @@ def create_artist_submission():
         db.session.close()
    return render_template('pages/home.html')
 
+@app.route('/artists/<int:artist_id>/delete', methods=['GET', 'POST'])
+def delete_artist(artist_id):
 
+    try:
+        artist = Artist.query.get(artist_id)
+        db.session.delete(artist)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+    finally:
+        db.session.close()
+    return redirect(url_for('index'))
 #  Shows
 #  ----------------------------------------------------------------
 
